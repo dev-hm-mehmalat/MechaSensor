@@ -1,62 +1,158 @@
 <!DOCTYPE html>
 <html lang="de">
 <head>
-    <meta charset="UTF-8" />
-    <title>MechaSensor Dashboard</title>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MechaSensor Dashboard</title>
+  
+  <!-- Bootstrap für responsives Layout -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+  
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Luxon (für Zeitformatierung in Chart.js) -->
+  <script src="https://cdn.jsdelivr.net/npm/luxon@3/build/global/luxon.min.js"></script>
+  
+  <style>
+    body {
+      background: #f0f2f5;
+      padding: 20px;
+    }
+    .dashboard-container {
+      max-width: 900px;
+      margin: auto;
+      background: white;
+      padding: 25px;
+      border-radius: 10px;
+      box-shadow: 0 0 15px rgba(0,0,0,0.1);
+    }
+    #status {
+      text-align: center;
+      margin-top: 10px;
+      font-style: italic;
+      color: #555;
+    }
+  </style>
 </head>
 <body>
-    <h1>MechaSensor Sensor-Daten Dashboard</h1>
-    <canvas id="sensorChart" width="800" height="400"></canvas>
+  <div class="dashboard-container">
+    <h1 class="text-center mb-4">MechaSensor Sensor-Daten Dashboard</h1>
 
-    <script>
-        async function fetchSensorData() {
-            const response = await fetch('/api/sensors/data');
-            const data = await response.json();
-            return data;
+    <canvas id="sensorChart" height="400"></canvas>
+    <div id="status">Lade Daten...</div>
+
+    <div class="text-center mt-4">
+      <button id="refreshButton" class="btn btn-primary">Jetzt neu laden</button>
+    </div>
+  </div>
+
+  <script>
+    const DateTime = luxon.DateTime;
+    const ctx = document.getElementById('sensorChart').getContext('2d');
+    const statusEl = document.getElementById('status');
+    const refreshBtn = document.getElementById('refreshButton');
+
+    let sensorChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: [],
+        datasets: [
+          {
+            label: 'Temperatur (°C)',
+            data: [],
+            borderColor: 'rgba(255, 99, 132, 1)',
+            backgroundColor: 'rgba(255, 99, 132, 0.2)',
+            tension: 0.3,
+            fill: true,
+            yAxisID: 'y',
+          },
+          {
+            label: 'Luftfeuchtigkeit (%)',
+            data: [],
+            borderColor: 'rgba(54, 162, 235, 1)',
+            backgroundColor: 'rgba(54, 162, 235, 0.2)',
+            tension: 0.3,
+            fill: true,
+            yAxisID: 'y1',
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        interaction: {
+          mode: 'index',
+          intersect: false,
+        },
+        stacked: false,
+        scales: {
+          x: {
+            type: 'time',
+            time: {
+              parser: 'iso8601',
+              tooltipFormat: 'dd. LLL yyyy, HH:mm:ss',
+              unit: 'minute',
+              displayFormats: {
+                minute: 'HH:mm'
+              }
+            },
+            title: {
+              display: true,
+              text: 'Zeit'
+            }
+          },
+          y: {
+            type: 'linear',
+            display: true,
+            position: 'left',
+            beginAtZero: true,
+            title: {
+              display: true,
+              text: 'Temperatur (°C)'
+            }
+          },
+          y1: {
+            type: 'linear',
+            display: true,
+            position: 'right',
+            beginAtZero: true,
+            grid: {
+              drawOnChartArea: false,
+            },
+            title: {
+              display: true,
+              text: 'Luftfeuchtigkeit (%)'
+            }
+          }
         }
+      }
+    });
 
-        function prepareChartData(sensorData) {
-            return {
-                labels: sensorData.map(d => new Date(d.timestamp).toLocaleTimeString()),
-                datasets: [
-                    {
-                        label: 'Temperatur (°C)',
-                        data: sensorData.map(d => d.temperature),
-                        borderColor: 'rgba(255, 99, 132, 1)',
-                        fill: false,
-                        tension: 0.3
-                    },
-                    {
-                        label: 'Luftfeuchtigkeit (%)',
-                        data: sensorData.map(d => d.humidity),
-                        borderColor: 'rgba(54, 162, 235, 1)',
-                        fill: false,
-                        tension: 0.3
-                    }
-                ]
-            };
-        }
+    async function fetchSensorData() {
+      statusEl.textContent = 'Lade Daten...';
+      try {
+        const res = await fetch('/api/sensors/data');
+        if (!res.ok) throw new Error(`Server antwortet mit Status ${res.status}`);
 
-        async function createChart() {
-            const data = await fetchSensorData();
-            const ctx = document.getElementById('sensorChart').getContext('2d');
-            const chartData = prepareChartData(data);
-            
-            new Chart(ctx, {
-                type: 'line',
-                data: chartData,
-                options: {
-                    responsive: true,
-                    scales: {
-                        x: { display: true, title: { display: true, text: 'Zeit' } },
-                        y: { display: true, title: { display: true, text: 'Wert' } }
-                    }
-                }
-            });
-        }
+        const json = await res.json();
+        const data = json.data || [];
 
-        createChart();
-    </script>
+        sensorChart.data.labels = data.map(d => d.timestamp);
+        sensorChart.data.datasets[0].data = data.map(d => d.temperature);
+        sensorChart.data.datasets[1].data = data.map(d => d.humidity);
+        sensorChart.update();
+
+        statusEl.textContent = `Letzte Aktualisierung: ${DateTime.now().toLocaleString(DateTime.DATETIME_SHORT)}`;
+      } catch (error) {
+        console.error(error);
+        statusEl.textContent = 'Fehler beim Laden der Sensordaten.';
+      }
+    }
+
+    refreshBtn.addEventListener('click', fetchSensorData);
+
+    // Initial laden & alle 5 Sekunden aktualisieren
+    fetchSensorData();
+    setInterval(fetchSensorData, 5000);
+  </script>
 </body>
 </html>
