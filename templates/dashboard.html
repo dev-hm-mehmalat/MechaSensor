@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8" />
+    <title>MechaSensor Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <h1>MechaSensor Sensor-Daten Dashboard</h1>
+    <canvas id="sensorChart" width="800" height="400"></canvas>
+
+    <script>
+        async function fetchSensorData() {
+            const response = await fetch('/api/sensors/data');
+            const data = await response.json();
+            return data;
+        }
+
+        function prepareChartData(sensorData) {
+            return {
+                labels: sensorData.map(d => new Date(d.timestamp).toLocaleTimeString()),
+                datasets: [
+                    {
+                        label: 'Temperatur (°C)',
+                        data: sensorData.map(d => d.temperature),
+                        borderColor: 'rgba(255, 99, 132, 1)',
+                        fill: false,
+                        tension: 0.3
+                    },
+                    {
+                        label: 'Luftfeuchtigkeit (%)',
+                        data: sensorData.map(d => d.humidity),
+                        borderColor: 'rgba(54, 162, 235, 1)',
+                        fill: false,
+                        tension: 0.3
+                    }
+                ]
+            };
+        }
+
+        async function createChart() {
+            const data = await fetchSensorData();
+            const ctx = document.getElementById('sensorChart').getContext('2d');
+            const chartData = prepareChartData(data);
+            
+            new Chart(ctx, {
+                type: 'line',
+                data: chartData,
+                options: {
+                    responsive: true,
+                    scales: {
+                        x: { display: true, title: { display: true, text: 'Zeit' } },
+                        y: { display: true, title: { display: true, text: 'Wert' } }
+                    }
+                }
+            });
+        }
+
+        createChart();
+    </script>
+</body>
+</html>
